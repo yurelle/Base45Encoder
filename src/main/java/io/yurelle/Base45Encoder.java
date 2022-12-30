@@ -12,8 +12,8 @@ import java.util.Map;
 /**
  * For some reason none of the Java QR Code libraries support binary payloads. At least, none that
  * I could find anyway. The commonly suggested workaround for this is to use Base64 encoding.
- * However, this results in a 4x payload size inflation. If your payload is already near the size
- * limit of QR codes, this is not possible.
+ * However, this results in a 33% payload size inflation. If your payload is already near the size
+ * limit of QR codes, this is a lot.
  *
  * This class implements an encoder which takes advantage of a built-in compression optimization
  * of the ZXING QR Code library, to enable the storage of Binary data into a QR Code, with a
