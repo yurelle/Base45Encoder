@@ -1,4 +1,6 @@
 import io.yurelle.Base45;
+import io.yurelle.SecureLookupWrapper;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.ByteArrayOutputStream;
@@ -8,8 +10,7 @@ import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.Random;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 /**
  * Implements all 4 examples provided in the Base45 spec, here:
@@ -21,7 +22,7 @@ public class Base45Test {
     @Test
     public void stringEncodingTest() throws IOException {
         //Init test data
-        final String testStr = "Some cool input data! !@#$%^&*()_+";
+        final String testStr = "Some cool input data! 0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*()_+";
 
         //Encode
         final String encodedStr = Base45.encode(testStr.getBytes(StandardCharsets.US_ASCII));
@@ -128,6 +129,120 @@ public class Base45Test {
             assertEquals(EXPECTED_STR, decodedString);
             System.out.println("\tPassed!");
         }
+    }
+
+    /**
+     * Implements the Security examples from the official standard.
+     *
+     * See: Section 6, of https://datatracker.ietf.org/doc/html/rfc9285
+     */
+    @Test
+    public void securityStandardTest() throws IOException {
+        //
+        // Decoding - Rejection Bounds
+        //
+        System.out.println("\n--------\nDecoding - Reject\n--------\n");
+        {// "FGW" // Section 6, Paragraph 5; Example 1
+            final String INPUT_STR = "FGW";
+            byte[] decodedBytes = Base45.decode(INPUT_STR);
+            assertArrayEquals(new byte[] {(byte) 255, (byte) 255}, decodedBytes);
+            System.out.print("\"" + INPUT_STR + "\":\tdecoded:\t" + printByteArray(decodedBytes) + "\tPassed!");
+        }
+
+        {// "GGW" // Section 6, Paragraph 5; Example 2
+            final String INPUT_STR = "GGW";
+            Assert.assertThrows(IllegalArgumentException.class, () -> Base45.decode(INPUT_STR));
+            System.out.println("\"" + INPUT_STR + "\":\tRejected!\tPassed! (Threw Expected Exception)");
+        }
+
+        //
+        // Decoding - Rejection Bounds - Byte Values
+        //
+        System.out.println("\n--------\nDecoding - Reject - Byte Values\n--------\n");
+        {// SecureLookupWraper // Section 6, Paragraph 4
+            for (int b=0; b<256; b++) {
+                //Test
+                if (isValidBase45Char(b)) {
+                    assertNotEquals(-1, SecureLookupWrapper.doReverseLookup(b, 0));
+
+                    //Log
+                    System.out.println("Byte Value \"" + ((int) b) + "\":\tAccepted!\tPassed!");
+                } else {
+                    final int byteVal = b;
+                    Assert.assertThrows(IllegalArgumentException.class, () -> SecureLookupWrapper.doReverseLookup(byteVal, 0));
+
+                    //Log
+                    System.out.println("Byte Value \"" + ((int) b) + "\":\tRejected!\tPassed! (Threw Expected Exception)");
+                }
+            }
+        }
+
+        //
+        // Decoding - Rejection Bounds - Byte Bounds
+        //
+        System.out.println("\n--------\nDecoding - Reject - Byte Bounds\n--------\n");
+        {//Overflow Value
+            final int overflowVal = 256;
+            Assert.assertThrows(IllegalArgumentException.class, () -> SecureLookupWrapper.doReverseLookup(overflowVal, 0));
+            System.out.println("Overflow Value \"" + overflowVal + "\":\tRejected!\tPassed! (Threw Expected Exception)");
+        }
+
+        {//Negative Value
+            final int negativeVal = -1;
+            Assert.assertThrows(IllegalArgumentException.class, () -> SecureLookupWrapper.doReverseLookup(negativeVal, 0));
+            System.out.println("Negative Value \"" + negativeVal + "\":\tRejected!\tPassed! (Threw Expected Exception)");
+
+        }
+
+        //
+        // Encoding - Rejection Bounds - Base45 Bounds
+        //
+        System.out.println("\n--------\nEncoding - Rejection Bounds - Base45 Bounds\n--------\n");
+        {//Max Value
+            final int maxVal = 44;
+            SecureLookupWrapper.doLookup(maxVal, 0);//The test is that no exception is thrown.
+            System.out.println("Max Value \"" + maxVal + "\":\tAccepted!\tPassed!");
+        }
+
+        {//Overflow Value
+            final int overflowVal = 45;
+            Assert.assertThrows(IllegalArgumentException.class, () -> SecureLookupWrapper.doLookup(overflowVal, 0));
+            System.out.println("Overflow Value \"" + overflowVal + "\":\tRejected!\tPassed! (Threw Expected Exception)");
+        }
+
+        {//Zero Value
+            final int zeroVal = 0;
+            SecureLookupWrapper.doLookup(zeroVal, 0);//The test is that no exception is thrown.
+            System.out.println("Zero Value \"" + zeroVal + "\":\tAccepted!\tPassed!");
+
+        }
+        {//Negative Value
+            final int negativeVal = -1;
+            Assert.assertThrows(IllegalArgumentException.class, () -> SecureLookupWrapper.doLookup(negativeVal, 0));
+            System.out.println("Negative Value \"" + negativeVal + "\":\tRejected!\tPassed! (Threw Expected Exception)");
+
+        }
+    }
+
+    private boolean isValidBase45Char(int b) {
+        return (
+                //Numbers
+                ('0' <= b && b <= '9') ||
+
+                //Letters
+                ('A' <= b && b <= 'Z') ||
+
+                //Symbols
+                b == ' ' ||
+                b == '$' ||
+                b == '%' ||
+                b == '*' ||
+                b == '+' ||
+                b == '-' ||
+                b == '.' ||
+                b == '/' ||
+                b == ':'
+        );
     }
 
     private String printByteArray(final byte[] arr) {
